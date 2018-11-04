@@ -1,44 +1,74 @@
 (ns gilded-rose.core)
 
-(defn update-quality [items]
-  (map
-    (fn[item] (cond
-      (and (< (:sell-in item) 0) (= "Backstage passes to a TAFKAL80ETC concert" (:name item)))
-        (merge item {:quality 0})
-      (or (= (:name item) "Aged Brie") (= (:name item) "Backstage passes to a TAFKAL80ETC concert"))
-        (if (and (= (:name item) "Backstage passes to a TAFKAL80ETC concert") (>= (:sell-in item) 5) (< (:sell-in item) 10))
-          (merge item {:quality (inc (inc (:quality item)))})
-          (if (and (= (:name item) "Backstage passes to a TAFKAL80ETC concert") (>= (:sell-in item) 0) (< (:sell-in item) 5))
-            (merge item {:quality (inc (inc (inc (:quality item))))})
-            (if (< (:quality item) 50)
-              (merge item {:quality (inc (:quality item))})
-              item)))
-      (< (:sell-in item) 0)
-        (if (= "Backstage passes to a TAFKAL80ETC concert" (:name item))
-          (merge item {:quality 0})
-          (if (or (= "+5 Dexterity Vest" (:name item)) (= "Elixir of the Mongoose" (:name item)))
-            (merge item {:quality (- (:quality item) 2)})
-            item))
-      (or (= "+5 Dexterity Vest" (:name item)) (= "Elixir of the Mongoose" (:name item)))
-        (merge item {:quality (dec (:quality item))})
-      :else item))
-  (map (fn [item]
-      (if (not= "Sulfuras, Hand of Ragnaros" (:name item))
-        (merge item {:sell-in (dec (:sell-in item))})
-        item))
-  items)))
+(def sulfuras "Sulfuras, Hand Of Ragnaros")
+(def elixir-of-the-mongoose "Elixir of the Mongoose")
+(def backstage-passes "Backstage passes to a TAFKAL80ETC concert")
+(def aged-brie "Aged Brie")
+(def dexterity-vest "+5 Dexterity Vest")
+(def conjured "Conjured")
+
+(defmulti update-sell-in
+  (fn [item] (item :name)))
+
+(defmethod update-sell-in sulfuras [item]
+  item)
+
+(defmethod update-sell-in :default [item]
+  (update-in item [:sell-in] dec))
+
+(defmulti update-quality
+  (fn [item] (item :name)))
+
+(defn update-max-50 [f]
+  (fn [x] (min (f x) 50)))
+
+(defmethod update-quality aged-brie [item]
+  (update-in item [:quality] (update-max-50 inc)))
+
+(defmethod update-quality sulfuras [item]
+  item)
+
+(defmethod update-quality backstage-passes [item]
+  (update-in item [:quality]
+             (update-max-50
+               (fn [quality]
+                 (cond
+                   (= (item :sell-in) 0)
+                     0
+                   (<= (item :sell-in) 5)
+                     (+ quality 3)
+                   (<= (item :sell-in) 10)
+                     (+ quality 2)
+                   :else
+                     (+ quality 1))))))
+
+(defmethod update-quality conjured [item]
+  (update-in item [:quality] (comp dec dec)))
+
+(defmethod update-quality :default [item]
+  (update-in item [:quality]
+             (fn [quality]
+               (if (> (item :sell-in) 0)
+                 (- quality 1)
+                 (- quality 2)))))
 
 (defn item [item-name, sell-in, quality]
   {:name item-name, :sell-in sell-in, :quality quality})
 
 (defn update-current-inventory[]
-  (let [inventory 
+  (let [inventory
     [
-      (item "+5 Dexterity Vest" 10 20)
-      (item "Aged Brie" 2 0)
-      (item "Elixir of the Mongoose" 5 7)
-      (item "Sulfuras, Hand Of Ragnaros" 0 80)
-      (item "Backstage passes to a TAFKAL80ETC concert" 15 20)
+      (item dexterity-vest 10 20)
+      (item aged-brie 2 0)
+      (item elixir-of-the-mongoose 5 7)
+      (item sulfuras 0 80)
+      (item backstage-passes 15 20)
+      (item conjured 20 20)
     ]]
-    (update-quality inventory)
-    ))
+
+    (map
+      (fn [item]
+        (-> item
+            update-sell-in
+            update-quality)) inventory)))
+
